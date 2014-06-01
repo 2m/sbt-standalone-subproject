@@ -1,8 +1,8 @@
 name := "Standalone subproject"
 
-executeTests in Test := {
-  println("Custom executeTests task")
-  Tests.Output(TestResult.Passed, Map.empty, Seq.empty)
-}
+scalaVersion := "2.11.0"
 
-libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.3.2"
+libraryDependencies ++= Seq(
+  "2m" %% "standalone-subproject-dependency" % "1.0.1",
+  "org.scalatest" % "scalatest_2.11" % "2.1.6" % "test"
+)

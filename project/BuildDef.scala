@@ -1,5 +1,13 @@
 import sbt._
+import sbt.BuildPaths._
+import sbt.BuildStreams._
+import sbt.compiler.Eval
+import sbt.inc.{Locate, FileValueCache}
 import sbt.Keys._
+import sbt.Select
+import sbt.Select
+import sbt.Select
+import scala.collection.mutable
 
 object BuildDef extends Build {
 
@@ -7,41 +15,31 @@ object BuildDef extends Build {
     id = "sbt-standalone-subproject",
     base = file("."),
     settings = Defaults.defaultSettings ++ Seq(
-      commands += firstCommand
+      commands ++= Seq(testWithLibraryDep, testWithProjectDep),
+      scalaVersion := "2.11.0"
     )
-  ) dependsOn(akkaActor, standaloneSubproject)
+  )
 
-  lazy val akkaActor = ProjectRef(file("akka-actor").toURI, "akka-actor")
+  def testWithLibraryDep = Command.command("testWithLibraryDep") { s =>
+    loadAndTest(s, Load.defaultLoad)
+    s
+  }
 
-  lazy val standaloneSubproject = ProjectRef(file("standalone-subproject").toURI, "standalone-subproject")
+  def testWithProjectDep = Command.command("testWithProjectDep") { s =>
+    loadAndTest(s, CustomLoader.defaultLoad)
+    s
+  }
 
-  def firstCommand = Command.command("cloneSubroject") { st =>
+  def loadAndTest(s: State, loader: (State, File, Logger, Boolean, List[URI]) => (() => Eval, sbt.BuildStructure)) {
+    val base = file("standalone-subproject")
+    val projectRef = ProjectRef(base.toURI, "standalone-subproject")
 
-    val extracted = Project.extract(st)
+    val (eval, structure) = loader(s, base, s.log, false, Nil)
 
-    val subResolved = Project.getProject(standaloneSubproject, extracted.structure).get
+    val session = Load.initialSession(structure, eval, s)
+    val state = Project.setProject(session, structure, s)
 
-    lazy val subProject = Project(
-      id = subResolved.id + "-head",
-      base = subResolved.base,
-      settings = subResolved.settings ++ Seq(
-        allDependencies := allDependencies.value.filterNot { moduleId =>
-          moduleId.organization == "com.typesafe.akka"
-        }
-      ),
-      configurations = subResolved.configurations
-    )
-
-    //val appendSettings = Load.transformSettings(Load.projectScope(<reference of subProject>), extracted.currentRef.build, extracted.rootProject, settings)
-    //val newStructure = Load.reapply(extracted.session.original ++ appendSettings, extracted.structure)
-    //val state = Project.setProject(extracted.session, newStructure, st)
-
-    val (state2, _) = extracted.runTask(test in (standaloneSubproject, Test), st)
-
-    // throws java.lang.RuntimeException: standalone-subproject-head/test:test is undefined
-    val (state3, _) = extracted.runTask(test in (subProject, Test), state2)
-
-    state3
+    Project.extract(state).runTask(test in (projectRef, Test), state)
   }
 
 }
